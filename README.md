@@ -1,0 +1,1 @@
+# birdclef2023-2nd-place-solution

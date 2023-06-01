@@ -20,6 +20,13 @@ def prepare_cfg(cfg,stage):
     else:
         raise NotImplementedError
 
+def train_test_split(df,df_labels):
+    df_train = df
+    df_labels_train = df_label
+    df_valid = pd.DataFrame(columns=df_train.columns)
+    df_labels_valid = pd.DataFrame(columns=df_labels_train.columns)
+    return df_train,df_valid,df_labels_train,df_labels_valid
+
 def preprocess(cfg):
     def transforms(audio):
         audio = cfg.np_audio_transforms(audio)
@@ -66,8 +73,10 @@ def preprocess(cfg):
     df_labels = df_labels[(df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground')].reset_index(drop=True)
     df = df[(df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground')].reset_index(drop=True)
 
-    sample_weight = np.zeros(shape=(len(df,)))
-    for i,(primary_label, secondary_labels) in enumerate(zip(df[cfg.primary_label_col].values,df[cfg.secondary_labels_col].values)):
+    df_train,df_valid,df_labels_train,df_labels_valid = train_test_split(df,df_labels)
+
+    sample_weight = np.zeros(shape=(len(df_train,)))
+    for i,(primary_label, secondary_labels) in enumerate(zip(df_train[cfg.primary_label_col].values,df_train[cfg.secondary_labels_col].values)):
         if primary_label in cfg.bird_cols:
             sample_weight[i] = 1.0/(class_sample_count[primary_label])
         else:
@@ -75,4 +84,4 @@ def preprocess(cfg):
             sample_weight[i] = np.mean([1.0/class_sample_count[secondary_label] for secondary_label in secondary_labels_include])
 
     sample_weight = torch.from_numpy(sample_weight)
-    return df, df_labels, sample_weight , transforms
+    return df_train, df_valid, df_labels_train, df_labels_valid, sample_weight, transforms

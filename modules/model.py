@@ -18,6 +18,7 @@ from torch.optim.lr_scheduler import (
     OneCycleLR,
 )
 import sklearn.metrics
+from torch.cuda.amp import autocast
 
 
 def padded_cmap(solution, submission, padding_factor=5):
@@ -353,19 +354,14 @@ class Mixup2(nn.Module):
 class BirdClefModelBase(pl.LightningModule):
     def __init__(self, cfg, stage):
         super().__init__()
-        if stage in ["pretrain_ce", "pretrain_bce"]:
-            self.num_classes = cfg.num_classes["pretrain"]
-        elif stage in ["train_ce", "train_bce", "finetune"]:
-            self.num_classes = cfg.num_classes["train"]
-        else:
-            raise NotImplementedError
+        self.num_classes = len(cfg.bird_cols)
         self.birds = [bird for bird in self.cfg.bird_cols]
         self.stage = stage
         self.cfg = cfg
         self.loss = cfg.loss[stage]
         self.lr = cfg.lr[stage]
         self.epochs = cfg.epochs[stage]
-        self.in_chans = 3 if cfg.use_delta else 1
+        self.in_chans = cfg.in_chans
 
         if self.loss == "ce":
             self.loss_function = nn.CrossEntropyLoss(
@@ -510,7 +506,11 @@ class BirdClefModelBase(pl.LightningModule):
             },
         }
 
+    def freeze(self):
+        raise NotImplementedError
+
     def training_step(self, batch, batch_idx):
+        self.freeze()
         y_pred, target, loss = self(batch)
 
         # self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True)
@@ -615,13 +615,13 @@ class BirdClefModelBase(pl.LightningModule):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
         self.log("train_loss", avg_loss, on_step=False, on_epoch=True, prog_bar=True)
         if (self.ema is not None) & ((self.current_epoch > self.epochs - 3 - 1)):
-            if not os.path.exists(self.cfg.dirpath):
-                os.makedirs(self.cfg.dirpath)
+            if not os.path.exists(self.cfg.output_path[stage]):
+                os.makedirs(self.cfg.output_path[stage])
             torch.save(
                 {
                     "state_dict": self.ema.module.state_dict(),
                 },
-                os.path.join(self.cfg.dirpath, f"ema_{self.current_epoch}.ckpt"),
+                os.path.join(self.cfg.output_path[stage], f"ema_{self.current_epoch}.ckpt"),
             )
 
 
@@ -656,7 +656,20 @@ class BirdClefTrainModelSED(BirdClefModelBase):
     def init_weight(self):
         init_layer(self.fc1)
         init_bn(self.bn0)
-        
+
+    def freeze(self):
+        if self.stage == "finetune":
+            self.encoder.eval()
+            self.fc1.eval()
+            self.bn0.eval()
+            for param in self.encoder.parameters():
+                param.requires_grad = False
+            for param in self.fc1.parameters():
+                param.requires_grad = False
+            for param in self.bn0.parameters():
+                param.requires_grad = False
+        return
+
     def extract_feature(self,x):
         x = x.permute((0, 1, 3, 2))
         frames_num = x.shape[2]
@@ -688,17 +701,6 @@ class BirdClefTrainModelSED(BirdClefModelBase):
         return x
 
     def forward(self, batch):
-        if self.stage == "finetune":
-            self.encoder.eval()
-            self.fc1.eval()
-            self.bn0.eval()
-            for param in self.encoder.parameters():
-                param.requires_grad = False
-            for param in self.fc1.parameters():
-                param.requires_grad = False
-            for param in self.bn0.parameters():
-                param.requires_grad = False
-
         x = batch[0]
         y = batch[1]
         weight = batch[2]
@@ -709,7 +711,7 @@ class BirdClefTrainModelSED(BirdClefModelBase):
         if self.training:
             if self.cfg.mixup:
                 x, y, weight = self.mixup(x, y, weight)
-
+        #with autocast(enabled=False):
         x = self.transform_to_spec(x)
         if self.in_chans == 3:
             x = image_delta(x)
@@ -832,6 +834,15 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
 
         self.big_dropout = nn.Dropout(p=0.5)
 
+    def freeze(self):
+        if self.stage == "finetune":
+            self.backbone.eval()
+            self.global_pool.eval()
+            for param in self.global_pool.parameters():
+                param.requires_grad = False
+            for param in self.backbone.parameters():
+                param.requires_grad = False
+
     def predict(self,x):
         x = x.permute(0, 1, 3, 2)
         # x = x.permute(0, 2, 1)
@@ -870,14 +881,6 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
         return logits
 
     def forward(self, batch):
-        if self.stage == "finetune":
-            self.backbone.eval()
-            self.global_pool.eval()
-            for param in self.global_pool.parameters():
-                param.requires_grad = False
-            for param in self.backbone.parameters():
-                param.requires_grad = False
-
         x = batch[0].squeeze(1)
         y = batch[1]
         weight = batch[2]
@@ -894,7 +897,7 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
                 x, y, weight = self.mixup(x, y, weight)
         bs, time = x.shape
         x = x.reshape(bs * self.factor, time // self.factor)
-
+        #with autocast(enabled=False):
         x = self.transform_to_spec(x.unsqueeze(1))
         if self.in_chans == 3:
             x = image_delta(x)
@@ -911,7 +914,55 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
         loss = loss.sum()
 
         return logits, y, loss
-    
+
 class BirdClefInferModelCNN(BirdClefTrainModelCNN):
     def forward(self,x):
         return self.predict(x)
+
+def load_model(cfg,stage,train=True):
+    if train:
+        model_ckpt = cfg.model_ckpt[stage]
+    else:
+        model_ckpt = cfg.final_model_path
+
+    if model_ckpt is not None:
+        state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE)
+    else:
+        state_dict = None
+
+    if 'sed' in model:
+        if train:
+            model = BirdClefTrainModelSED(cfg, stage)
+            if state_dict is not None:
+                # pretrain to train
+                if stage == 'train_ce':
+                    state_dict.pop('att_block.att.weight')
+                    state_dict.pop('att_block.att.bias')
+                    state_dict.pop('att_block.cla.weight')
+                    state_dict.pop('att_block.cla.bias')
+                    model.load_state_dict(state_dict,strict=False)
+                else:
+                    model.load_state_dict(state_dict)
+        else:
+            model = BirdClefInferModelSED(cfg, stage)
+            model.load_state_dict(state_dict)
+
+    elif 'cnn' in model:
+        if train:
+            model = BirdClefTrainModelCNN(cfg, stage)
+            if state_dict is not None:
+                # pretrain to train
+                if stage == 'train_ce':
+                    state_dict.pop('head.weight')
+                    state_dict.pop('head.bias')
+                    model.load_state_dict(state_dict,strict=False)
+                else:
+                    model.load_state_dict(state_dict)
+        else:
+            model = BirdClefInferModelCNN(cfg, stage)
+            model.load_state_dict(state_dict)
+    else:
+        raise NotImplementedError
+    return model
+
+

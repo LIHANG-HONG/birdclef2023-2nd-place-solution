@@ -24,6 +24,7 @@ cfg.secondary_label_weight = 0.5
 
 
 cfg.batch_size = 96
+cfg.PRECISION = 32
 cfg.seed = {
     "pretrain_ce": 20231121,
     "pretrain_bce": 20230503,
@@ -41,7 +42,7 @@ cfg.mixup_double = 0.5
 cfg.mixup2_prob = 0.15
 cfg.mix_beta = 5
 cfg.mix_beta2 = 2
-cfg.use_delta = (True,)
+cfg.in_chans = 3
 cfg.epochs = {
     "pretrain_ce": 70,
     "pretrain_bce": 40,
@@ -59,19 +60,23 @@ cfg.lr = {
 
 cfg.model_ckpt = {
     "pretrain_ce": None,
-    "pretrain_bce": "outputs/sed_v2s/pretrain_ce/last.ckpt",
-    "train_ce": "outputs/sed_v2s/pretrain_bce/last.ckpt",
-    "train_bce": "outputs/sed_v2s/train_ce/last.ckpt",
-    "finetune": "outputs/sed_v2s/train_bce/last.ckpt",
+    "pretrain_bce": "outputs/sed_v2s/pytorch/pretrain_ce/last.ckpt",
+    "train_ce": "outputs/sed_v2s/pytorch/pretrain_bce/last.ckpt",
+    "train_bce": "outputs/sed_v2s/pytorch/train_ce/last.ckpt",
+    "finetune": "outputs/sed_v2s/pytorch/train_bce/last.ckpt",
 }
 
 cfg.output_path = {
-    "pretrain_ce": "outputs/sed_v2s/pretrain_ce",
-    "pretrain_bce": "outputs/sed_v2s/pretrain_bce",
-    "train_ce": "outputs/sed_v2s/train_ce",
-    "train_bce": "outputs/sed_v2s/train_bce",
-    "finetune": "outputs/sed_v2s/finetune",
+    "pretrain_ce": "outputs/sed_v2s/pytorch/pretrain_ce",
+    "pretrain_bce": "outputs/sed_v2s/pytorch/pretrain_bce",
+    "train_ce": "outputs/sed_v2s/pytorch/train_ce",
+    "train_bce": "outputs/sed_v2s/pytorch/train_bce",
+    "finetune": "outputs/sed_v2s/pytorch/finetune",
 }
+
+cfg.final_model_path = "outputs/sed_v2s/pytorch/finetune/last.ckpt"
+cfg.onnx_path = "outputs/sed_v2s/onnx"
+cfg.openvino_path = "outputs/sed_v2s/openvino"
 
 cfg.loss = {
     "pretrain_ce": "ce",
@@ -140,5 +145,10 @@ np_audio_transforms = CustomCompose(
         ),
     ]
 )
+
+cfg.input_shape = (120,cfg.in_chans,cfg.n_mels,768)
+cfg.input_names = [ "x",'tta_delta' ]
+cfg.output_names = [ "y" ]
+cfg.opset_version = None
 
 basic_cfg = cfg

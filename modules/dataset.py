@@ -1,14 +1,16 @@
 import librosa as lb
 import numpy as np
 import torch
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from utils import crop_or_pad
+import multiprocessing
 
-class BirdTrainDataset(torch.utils.data.Dataset):
+class BirdTrainDataset(Dataset):
 
-    def __init__(self, df, df_label, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None ,pseudo_weights=None, transforms=None):
+    def __init__(self, df, df_labels, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None ,pseudo_weights=None, transforms=None):
 
         self.df = df
-        self.df_label = df_label
+        self.df_labels = df_labels
         self.sr = cfg.SR
         self.n_mels = cfg.n_mels
         self.fmin = cfg.f_min
@@ -140,7 +142,7 @@ class BirdTrainDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        target = self.df_label[idx]
+        target = self.df_labels[idx]
 
         weight = self.df.loc[idx,"weight"]
         if row['presence_type']!='foreground':
@@ -148,3 +150,30 @@ class BirdTrainDataset(torch.utils.data.Dataset):
         audio, target = self.load_data(self.df.loc[idx, "path"],target,row)
         target = torch.tensor(target).float()
         return audio, target , weight
+
+def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, sample_weight,cfg,pseudo=None,pseudo_weights=None,transforms=None):
+  num_workers = multiprocessing.cpu_count()
+  sample_weight = torch.from_numpy(sample_weight)
+  sampler = WeightedRandomSampler(sample_weight.type('torch.DoubleTensor'), len(sample_weight),replacement=True)
+
+  ds_train = BirdTrainDataset(
+      df_train,
+      df_labels_train,
+      cfg,
+      train = True,
+      pseudo = pseudo,
+      pseudo_weights = pseudo_weights,
+      transforms = transforms,
+  )
+  ds_val = BirdTrainDataset(
+      df_valid,
+      df_labels_valid,
+      cfg,
+      train = False,
+      pseudo = None,
+      pseudo_weights= None,
+      transforms=None,
+  )
+  dl_train = DataLoader(ds_train, batch_size=cfg.batch_size , sampler=sampler, num_workers = num_workers, pin_memory=True)
+  dl_val = DataLoader(ds_val, batch_size=cfg.test_batch_size, num_workers = num_workers, pin_memory=True)
+  return dl_train, dl_val, ds_train, ds_val

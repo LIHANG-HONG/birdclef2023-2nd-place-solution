@@ -1,0 +1,150 @@
+import librosa as lb
+import numpy as np
+import torch
+from utils import crop_or_pad
+
+class BirdTrainDataset(torch.utils.data.Dataset):
+
+    def __init__(self, df, df_label, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None ,pseudo_weights=None, transforms=None):
+
+        self.df = df
+        self.df_label = df_label
+        self.sr = cfg.SR
+        self.n_mels = cfg.n_mels
+        self.fmin = cfg.f_min
+        self.fmax = cfg.f_max
+
+        self.train = train
+        self.duration = cfg.DURATION
+
+        self.audio_length = self.duration*self.sr
+
+        self.res_type = res_type
+        self.resample = resample
+
+        self.df["weight"] = np.clip(self.df["rating"] / self.df["rating"].max(), 0.1, 1.0)
+        self.pseudo = pseudo
+        self.pseudo_weights = pseudo_weights
+        
+        self.transforms = transforms
+
+    def __len__(self):
+        return len(self.df)
+
+    def adjust_label(self,labels,filename,sample_ends,target,version,pseudo,pseudo_weights):
+        if pseudo is not None:
+          adjust_label = {label:0 for label in labels if label in self.cfg.bird_cols}
+
+          for oof,w in zip(pseudo,pseudo_weights):
+            for label in self.cfg.bird_cols:
+              preds = [oof['pred'][version][filename][label][sample_end] for sample_end in sample_ends]
+              thre = oof['thre'][label]
+              adjusts = np.zeros(shape=(len(preds),))
+              for i,pred in enumerate(preds):
+                q3,q2,q1 = thre['q3'],thre['q2'],thre['q1']
+                if pred>=q3:
+                  adjust = 1.0
+                elif pred>=q2:
+                  adjust = 0.9
+                elif pred>=q1:
+                  adjust = 0.5
+                else:
+                  adjust = 0.2
+                adjusts[i] = adjust
+              adjust_label[label] += w * (1-np.prod(1-adjusts))
+          for label in self.cfg.bird_cols:
+            if adjust_label[label] <= 0.6:
+              adjust_label[label] = 0.01
+            elif adjust_label[label]<=0.75:
+              adjust_label[label] = 0.6
+            target[label] = target[label] * adjust_label[label]
+        return target
+
+    def load_data(self, filepath,target,row):
+        filename = row['filename']
+        labels = [bird for bird in list(set([row[self.cfg.primary_label_col]] + row[self.cfg.secondary_labels_col])) if bird in self.cfg.bird_cols]
+        secondary_labels = [bird for bird in row[self.cfg.secondary_labels_col] if bird in self.cfg.bird_cols]
+        duration = row['duration']
+        version = row['version']
+        source = row['source']
+        presence = row['presence_type']
+
+        # self mixup
+        self_mixup_part = 1
+        if (presence!='foreground') | (len(secondary_labels)>0):
+          self_mixup_part = int(self.cfg.background_duration_thre/self.duration)
+        work_duration = self.duration * self_mixup_part
+        work_audio_length = work_duration*self.sr
+
+        max_offset =np.max([0,duration-work_duration])
+        parts = int(duration//self.cfg.infer_duration) if duration%self.cfg.infer_duration==0 else int(duration//self.cfg.infer_duration + 1)
+        ends = [(p+1)*self.cfg.infer_duration for p in range(parts)]
+        pseudo_max_end = ends[-1]
+
+        if self.train:
+            offset = torch.rand((1,)).numpy()[0] * max_offset
+            audio_sample, orig_sr = lb.load(filepath, sr=None, mono=True,offset=offset, duration=work_duration)
+            if (self.resample)&(orig_sr != self.sr):
+                audio_sample = lb.resample(audio_sample, orig_sr, self.sr, res_type=self.res_type)
+
+            if len(audio_sample) < work_audio_length:
+                audio_sample = crop_or_pad(audio_sample, length=work_audio_length,is_train=self.train)
+
+            audio_sample = audio_sample.reshape((self_mixup_part,-1))
+            audio_sample = np.sum(audio_sample,axis=0)
+
+            if self.transforms is not None:
+              audio_sample = self.transforms(audio_sample)
+
+            if len(audio_sample) != self.audio_length:
+                audio_sample = crop_or_pad(audio_sample, length=self.audio_length,is_train=self.train)
+
+            #pseudo is made every 5s. For example, if offset=7 then the nearest_offset=5
+            nearest_offset = int(np.round(offset/self.cfg.infer_duration) * self.cfg.infer_duration)
+            sample_ends = [str(nearest_offset+(i+1)*self.cfg.infer_duration) for i in range(int(work_duration/self.cfg.infer_duration)) if nearest_offset+(i+1)*self.cfg.infer_duration<=pseudo_max_end]
+            # use pseudo and hand label if the total duration of the audio is larger than clip duration
+            if work_duration < duration:
+              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add') | (version=='scrap_data') | (version=='scrap_data_add') | (version=='scrap_data_0515'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo,self.pseudo_weights)
+
+        else:
+            audio, orig_sr = lb.load(filepath, sr=None, mono=True,offset=0,duration=self.cfg.valid_duration)
+            if self.resample and orig_sr != self.sr:
+                audio = lb.resample(audio, orig_sr, self.sr, res_type=self.res_type)
+
+            audio_parts = int(np.ceil(len(audio)/self.audio_length))
+            audio_sample = [audio[i:(i+1)*self.audio_length] for i in range(audio_parts)]
+
+            if len(audio_sample[-1])<self.audio_length:
+              audio_sample[-1] = crop_or_pad(audio_sample[-1],length=self.audio_length,is_train=self.train)
+
+            valid_len = int(self.cfg.valid_duration/self.duration)
+            if len(audio_sample)> valid_len:
+              audio_sample = audio_sample[0:valid_len]
+            elif len(audio_sample)<valid_len:
+              diff = valid_len-len(audio_sample)
+              padding = [np.zeros(shape=(self.audio_length,))] * diff
+              audio_sample += padding
+
+            audio_sample = np.stack(audio_sample)
+
+            sample_end = np.min([audio_parts * self.cfg.infer_duration, pseudo_max_end])
+            sample_ends = [str(sample_end-i*self.cfg.infer_duration) for i in range(valid_len) if sample_end-i*self.cfg.infer_duration>0]
+
+            if self.cfg.valid_duration < duration:
+              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add') | (version=='scrap_data') | (version=='scrap_data_add') | (version=='scrap_data_0515'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo,self.pseudo_weights)
+
+        audio_sample = torch.tensor(audio_sample[np.newaxis]).float()
+        return audio_sample,target
+
+    def __getitem__(self, idx):
+        row = self.df.iloc[idx]
+        target = self.df_label[idx]
+
+        weight = self.df.loc[idx,"weight"]
+        if row['presence_type']!='foreground':
+            weight = weight * 0.8
+        audio, target = self.load_data(self.df.loc[idx, "path"],target,row)
+        target = torch.tensor(target).float()
+        return audio, target , weight

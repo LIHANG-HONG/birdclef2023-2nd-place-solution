@@ -1,5 +1,6 @@
 import argparse
 import importlib
+from modules.preprocess import prepare_cfg
 from modules.model import load_model
 import torch
 import os

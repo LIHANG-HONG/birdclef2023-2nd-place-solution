@@ -1,6 +1,6 @@
 import copy
 from configs.common import common_cfg
-from augmentations import (
+from modules.augmentations import (
     CustomCompose,
     CustomOneOf,
     NoiseInjection,
@@ -92,12 +92,8 @@ cfg.n_fft = 2048
 cfg.f_min = 0
 cfg.f_max = 16000
 
-cfg.test_batch_size = int(
-    np.max([int(cfg.batch_size / (int(cfg.valid_duration) / cfg.DURATION)), 2])
-)
-cfg.hop_length = cfg.infer_duration * cfg.SR // (cfg.img_size - 1)
-cfg.train_part = int(cfg.DURATION / cfg.infer_duration)
 cfg.valid_part = int(cfg.valid_duration / cfg.infer_duration)
+cfg.hop_length = cfg.infer_duration * cfg.SR // (cfg.img_size - 1)
 
 cfg.normal = 80
 

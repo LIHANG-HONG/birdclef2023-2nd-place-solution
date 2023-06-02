@@ -355,7 +355,7 @@ class BirdClefModelBase(pl.LightningModule):
     def __init__(self, cfg, stage):
         super().__init__()
         self.num_classes = len(cfg.bird_cols)
-        self.birds = [bird for bird in self.cfg.bird_cols]
+        self.birds = [bird for bird in cfg.bird_cols]
         self.stage = stage
         self.cfg = cfg
         self.loss = cfg.loss[stage]
@@ -506,10 +506,17 @@ class BirdClefModelBase(pl.LightningModule):
             },
         }
 
+    def freeze_transform(self):
+        self.melspec_transform.eval()
+        for param in self.melspec_transform.parameters():
+            param.requires_grad = False
+
+
     def freeze(self):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
+        self.freeze_transform()
         self.freeze()
         y_pred, target, loss = self(batch)
 
@@ -768,7 +775,7 @@ class BirdClefTrainModelSED(BirdClefModelBase):
         return torch.logit(clipwise_output), y, loss
 
 class BirdClefInferModelSED(BirdClefTrainModelSED):
-    def forward(self,x,tta_delta):
+    def forward(self,x,tta_delta=2):
         x = self.extract_feature(x)
         time_att = torch.tanh(self.att_block.att(x))
         feat_time = x.size(-1)
@@ -926,11 +933,11 @@ def load_model(cfg,stage,train=True):
         model_ckpt = cfg.final_model_path
 
     if model_ckpt is not None:
-        state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE)
+        state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE)['state_dict']
     else:
         state_dict = None
 
-    if 'sed' in model:
+    if cfg.model_type=='sed':
         if train:
             model = BirdClefTrainModelSED(cfg, stage)
             if state_dict is not None:
@@ -942,12 +949,12 @@ def load_model(cfg,stage,train=True):
                     state_dict.pop('att_block.cla.bias')
                     model.load_state_dict(state_dict,strict=False)
                 else:
-                    model.load_state_dict(state_dict)
+                    model.load_state_dict(state_dict,strict=False)
         else:
             model = BirdClefInferModelSED(cfg, stage)
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict,strict=False)
 
-    elif 'cnn' in model:
+    elif cfg.model_type=='cnn':
         if train:
             model = BirdClefTrainModelCNN(cfg, stage)
             if state_dict is not None:
@@ -957,12 +964,15 @@ def load_model(cfg,stage,train=True):
                     state_dict.pop('head.bias')
                     model.load_state_dict(state_dict,strict=False)
                 else:
-                    model.load_state_dict(state_dict)
+                    model.load_state_dict(state_dict,strict=False)
         else:
             model = BirdClefInferModelCNN(cfg, stage)
-            model.load_state_dict(state_dict)
+            model.load_state_dict(state_dict,strict=False)
     else:
         raise NotImplementedError
+
+    if not train:
+        model.eval()
     return model
 
 

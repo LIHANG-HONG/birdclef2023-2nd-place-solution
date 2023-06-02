@@ -1,8 +1,7 @@
 import colorednoise as cn
 import numpy as np
 import librosa
-
-
+import torch.nn as nn
 class AudioTransform:
     def __init__(self, always_apply=False, p=0.5):
         self.always_apply = always_apply

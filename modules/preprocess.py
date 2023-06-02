@@ -20,6 +20,12 @@ def prepare_cfg(cfg,stage):
     else:
         raise NotImplementedError
 
+    cfg.test_batch_size = int(
+        np.max([int(cfg.batch_size / (int(cfg.valid_duration) / cfg.DURATION)), 2])
+    )
+    cfg.train_part = int(cfg.DURATION / cfg.infer_duration)
+    return cfg
+
 def train_test_split(df,df_labels):
     df_train = df
     df_labels_train = df_label

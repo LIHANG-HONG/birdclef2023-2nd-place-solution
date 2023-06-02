@@ -15,6 +15,9 @@ from audiomentations import AddBackgroundNoise, Gain, GainTransition, TimeStretc
 import numpy as np
 
 cfg = copy.deepcopy(common_cfg)
+if cfg.WANDB_API_KEY=='your key':
+    print('input your wandb api key!')
+    raise NotImplementedError
 
 cfg.model_type = "sed"
 cfg.model_name = "tf_efficientnetv2_s_in21k"
@@ -99,7 +102,7 @@ cfg.normal = 80
 
 cfg.tta_delta = 3
 
-am_audio_transforms = amCompose(
+cfg.am_audio_transforms = amCompose(
     [
         # sed
         AddBackgroundNoise(
@@ -127,7 +130,7 @@ am_audio_transforms = amCompose(
 )
 
 
-np_audio_transforms = CustomCompose(
+cfg.np_audio_transforms = CustomCompose(
     [
         CustomOneOf(
             [

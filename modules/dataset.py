@@ -8,7 +8,7 @@ import multiprocessing
 class BirdTrainDataset(Dataset):
 
     def __init__(self, df, df_labels, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None ,pseudo_weights=None, transforms=None):
-
+        self.cfg =cfg
         self.df = df
         self.df_labels = df_labels
         self.sr = cfg.SR
@@ -68,7 +68,6 @@ class BirdTrainDataset(Dataset):
         secondary_labels = [bird for bird in row[self.cfg.secondary_labels_col] if bird in self.cfg.bird_cols]
         duration = row['duration']
         version = row['version']
-        source = row['source']
         presence = row['presence_type']
 
         # self mixup
@@ -142,7 +141,7 @@ class BirdTrainDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.df.iloc[idx]
-        target = self.df_labels[idx]
+        target = self.df_labels.loc[idx]
 
         weight = self.df.loc[idx,"weight"]
         if row['presence_type']!='foreground':

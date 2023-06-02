@@ -28,7 +28,7 @@ def prepare_cfg(cfg,stage):
 
 def train_test_split(df,df_labels):
     df_train = df
-    df_labels_train = df_label
+    df_labels_train = df_labels
     df_valid = pd.DataFrame(columns=df_train.columns)
     df_labels_valid = pd.DataFrame(columns=df_labels_train.columns)
     return df_train,df_valid,df_labels_train,df_labels_valid
@@ -50,6 +50,7 @@ def preprocess(cfg):
     df['path'] = df['id'].apply(lambda x: os.path.join(cfg.train_dir,f'XC{x}.ogg'))
     # ensure all the train data is available
     assert df['path'].apply(lambda x:os.path.exists(x)).all()
+    #df = df[df['path'].apply(lambda x:os.path.exists(x))].reset_index(drop=True)
 
     labels = np.zeros(shape=(len(df),len(cfg.bird_cols)))
     df_labels = pd.DataFrame(labels,columns=cfg.bird_cols)
@@ -76,8 +77,8 @@ def preprocess(cfg):
     df = df[include_in_train].reset_index(drop=True)
     df_labels = df_labels[include_in_train].reset_index(drop=True)
 
-    df_labels = df_labels[(df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground')].reset_index(drop=True)
-    df = df[(df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground')].reset_index(drop=True)
+    df_labels[((df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground'))|(df['presence_type']=='foreground')].reset_index(drop=True)
+    df = df[((df['duration']<=cfg.background_duration_thre)&(df['presence_type']!='foreground'))|(df['presence_type']=='foreground')].reset_index(drop=True)
 
     df_train,df_valid,df_labels_train,df_labels_valid = train_test_split(df,df_labels)
 
@@ -89,5 +90,4 @@ def preprocess(cfg):
             secondary_labels_include = [secondary_label for secondary_label in secondary_labels if secondary_label in cfg.bird_cols]
             sample_weight[i] = np.mean([1.0/class_sample_count[secondary_label] for secondary_label in secondary_labels_include])
 
-    sample_weight = torch.from_numpy(sample_weight)
     return df_train, df_valid, df_labels_train, df_labels_valid, sample_weight, transforms

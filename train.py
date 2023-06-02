@@ -7,6 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, BackboneFinetuning, EarlyStopping
 import torch
+import os
 import gc
 
 def make_parser():
@@ -22,11 +23,12 @@ def main():
     stage = args.stage
     model_name = args.model_name
     cfg = importlib.import_module(f'configs.{model_name}').basic_cfg
-    cfg = prepare_cfg(cfg)
+    cfg = prepare_cfg(cfg,stage)
+    os.environ['WANDB_API_KEY'] = cfg.WANDB_API_KEY
 
     pl.seed_everything(cfg.seed[stage], workers=True)
 
-    df_train, df_valid, df_label_train, df_label_valid, sample_weight, transforms = preprocess(cfg,stage)
+    df_train, df_valid, df_label_train, df_label_valid, sample_weight, transforms = preprocess(cfg)
 
     dl_train, dl_val, ds_train, ds_val = ged_train_dataloader(
         df_train,

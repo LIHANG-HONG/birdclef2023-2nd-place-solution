@@ -3,7 +3,7 @@ import glob
 import torch
 
 cfg = SimpleNamespace(**{})
-
+cfg.WANDB_API_KEY = 'your key'
 cfg.infer_duration = 5
 cfg.valid_duration = 60
 cfg.label_smoothing = 0.1
@@ -17,7 +17,7 @@ cfg.pseudo_label_path = 'inputs/pseudo_label'
 cfg.hand_label_path = 'inputs/hand_label'
 
 cfg.train_data = 'inputs/train.csv'
-cfg.train_dir = 'inputs/audios'
+cfg.train_dir = 'inputs/train_audios'
 cfg.test_dir = 'inputs/test_audios'
 
 cfg.birdclef2021_nocall = glob.glob("inputs/background_noise/birdclef2021_nocall/*")

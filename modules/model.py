@@ -506,17 +506,10 @@ class BirdClefModelBase(pl.LightningModule):
             },
         }
 
-    def freeze_transform(self):
-        self.melspec_transform.eval()
-        for param in self.melspec_transform.parameters():
-            param.requires_grad = False
-
-
     def freeze(self):
         raise NotImplementedError
 
     def training_step(self, batch, batch_idx):
-        self.freeze_transform()
         self.freeze()
         y_pred, target, loss = self(batch)
 
@@ -540,85 +533,86 @@ class BirdClefModelBase(pl.LightningModule):
     def validation_dataloader(self):
         return self._validation_dataloader
 
-    def validation_epoch_end(self, outputs):
-        avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
-        output_val = (
-            torch.cat([x["logits"] for x in outputs], dim=0)
-            .sigmoid()
-            .cpu()
-            .detach()
-            .numpy()
-        )
-        target_val = (
-            torch.cat([x["targets"] for x in outputs], dim=0).cpu().detach().numpy()
-        )
+    def on_validation_epoch_end(self, outputs):
+        if len(outputs):
+            avg_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
+            output_val = (
+                torch.cat([x["logits"] for x in outputs], dim=0)
+                .sigmoid()
+                .cpu()
+                .detach()
+                .numpy()
+            )
+            target_val = (
+                torch.cat([x["targets"] for x in outputs], dim=0).cpu().detach().numpy()
+            )
 
-        # print(output_val.shape)
-        val_df = pd.DataFrame(target_val, columns=self.birds)
-        pred_df = pd.DataFrame(output_val, columns=self.birds)
-        if self.current_epoch > -1:
-            avg_score = padded_cmap(val_df, pred_df, padding_factor=5)
-            avg_score2 = padded_cmap(val_df, pred_df, padding_factor=3)
-            avg_score3 = sklearn.metrics.label_ranking_average_precision_score(
-                target_val, output_val
-            )
-            self.log(
-                "val_loss",
-                avg_loss,
-                on_step=False,
-                on_epoch=True,
-                logger=True,
-                prog_bar=True,
-            )
-            self.log(
-                "validation C-MAP score pad 5",
-                avg_score,
-                on_step=False,
-                on_epoch=True,
-                logger=True,
-                prog_bar=True,
-            )
-            self.log(
-                "validation C-MAP score pad e",
-                avg_score2,
-                on_step=False,
-                on_epoch=True,
-                logger=True,
-                prog_bar=True,
-            )
-            self.log(
-                "validation AP score",
-                avg_score3,
-                on_step=False,
-                on_epoch=True,
-                logger=True,
-                prog_bar=True,
-            )
-            #         competition_metrics(output_val,target_val)
-            print(f"epoch {self.current_epoch} validation loss {avg_loss}")
-            print(
-                f"epoch {self.current_epoch} validation C-MAP score pad 5 {avg_score}"
-            )
-            print(
-                f"epoch {self.current_epoch} validation C-MAP score pad 3 {avg_score2}"
-            )
-            print(f"epoch {self.current_epoch} validation AP score {avg_score3}")
-        else:
-            self.log(
-                "val_loss",
-                avg_loss,
-                on_step=False,
-                on_epoch=True,
-                logger=True,
-                prog_bar=True,
-            )
-            avg_score = 0
-            print(f"epoch {self.current_epoch} validation loss {avg_loss}")
-        val_df.to_pickle("val_df.pkl")
-        pred_df.to_pickle("pred_df.pkl")
+            # print(output_val.shape)
+            val_df = pd.DataFrame(target_val, columns=self.birds)
+            pred_df = pd.DataFrame(output_val, columns=self.birds)
+            if self.current_epoch > -1:
+                avg_score = padded_cmap(val_df, pred_df, padding_factor=5)
+                avg_score2 = padded_cmap(val_df, pred_df, padding_factor=3)
+                avg_score3 = sklearn.metrics.label_ranking_average_precision_score(
+                    target_val, output_val
+                )
+                self.log(
+                    "val_loss",
+                    avg_loss,
+                    on_step=False,
+                    on_epoch=True,
+                    logger=True,
+                    prog_bar=True,
+                )
+                self.log(
+                    "validation C-MAP score pad 5",
+                    avg_score,
+                    on_step=False,
+                    on_epoch=True,
+                    logger=True,
+                    prog_bar=True,
+                )
+                self.log(
+                    "validation C-MAP score pad e",
+                    avg_score2,
+                    on_step=False,
+                    on_epoch=True,
+                    logger=True,
+                    prog_bar=True,
+                )
+                self.log(
+                    "validation AP score",
+                    avg_score3,
+                    on_step=False,
+                    on_epoch=True,
+                    logger=True,
+                    prog_bar=True,
+                )
+                #         competition_metrics(output_val,target_val)
+                print(f"epoch {self.current_epoch} validation loss {avg_loss}")
+                print(
+                    f"epoch {self.current_epoch} validation C-MAP score pad 5 {avg_score}"
+                )
+                print(
+                    f"epoch {self.current_epoch} validation C-MAP score pad 3 {avg_score2}"
+                )
+                print(f"epoch {self.current_epoch} validation AP score {avg_score3}")
+            else:
+                self.log(
+                    "val_loss",
+                    avg_loss,
+                    on_step=False,
+                    on_epoch=True,
+                    logger=True,
+                    prog_bar=True,
+                )
+                avg_score = 0
+                print(f"epoch {self.current_epoch} validation loss {avg_loss}")
+            val_df.to_pickle("val_df.pkl")
+            pred_df.to_pickle("pred_df.pkl")
         return {"val_loss": avg_loss, "val_cmap": avg_score}
 
-    def training_epoch_end(self, outputs):
+    def on_train_epoch_end(self, outputs):
         avg_loss = torch.stack([x["loss"] for x in outputs]).mean()
         self.log("train_loss", avg_loss, on_step=False, on_epoch=True, prog_bar=True)
         if (self.ema is not None) & ((self.current_epoch > self.epochs - 3 - 1)):
@@ -705,7 +699,7 @@ class BirdClefTrainModelSED(BirdClefModelBase):
         x = F.relu_(self.fc1(x))
         x = x.transpose(1, 2)
         x = F.dropout(x, p=0.5, training=self.training)
-        return x
+        return x, frames_num
 
     def forward(self, batch):
         x = batch[0]
@@ -727,7 +721,7 @@ class BirdClefTrainModelSED(BirdClefModelBase):
             if self.cfg.mixup2:
                 x, y, weight = self.mixup2(x, y, weight)
 
-        x = self.extract_feature(x)
+        x, frames_num = self.extract_feature(x)
 
         (clipwise_output, norm_att, segmentwise_output) = self.att_block(x)
         logit = torch.sum(norm_att * self.att_block.cla(x), dim=2)
@@ -776,7 +770,7 @@ class BirdClefTrainModelSED(BirdClefModelBase):
 
 class BirdClefInferModelSED(BirdClefTrainModelSED):
     def forward(self,x,tta_delta=2):
-        x = self.extract_feature(x)
+        x,_ = self.extract_feature(x)
         time_att = torch.tanh(self.att_block.att(x))
         feat_time = x.size(-1)
         start = (

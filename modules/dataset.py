@@ -7,7 +7,7 @@ import multiprocessing
 
 class BirdTrainDataset(Dataset):
 
-    def __init__(self, df, df_labels, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None ,pseudo_weights=None, transforms=None):
+    def __init__(self, df, df_labels, cfg, res_type="kaiser_fast",resample=True, train = True, pseudo=None, transforms=None):
         self.cfg =cfg
         self.df = df
         self.df_labels = df_labels
@@ -26,40 +26,38 @@ class BirdTrainDataset(Dataset):
 
         self.df["weight"] = np.clip(self.df["rating"] / self.df["rating"].max(), 0.1, 1.0)
         self.pseudo = pseudo
-        self.pseudo_weights = pseudo_weights
-        
+
         self.transforms = transforms
 
     def __len__(self):
         return len(self.df)
 
     def adjust_label(self,labels,filename,sample_ends,target,version,pseudo,pseudo_weights):
-        if pseudo is not None:
-          adjust_label = {label:0 for label in labels if label in self.cfg.bird_cols}
+        adjust_label = {label:0 for label in labels if label in self.cfg.bird_cols}
 
-          for oof,w in zip(pseudo,pseudo_weights):
-            for label in self.cfg.bird_cols:
-              preds = [oof['pred'][version][filename][label][sample_end] for sample_end in sample_ends]
-              thre = oof['thre'][label]
-              adjusts = np.zeros(shape=(len(preds),))
-              for i,pred in enumerate(preds):
-                q3,q2,q1 = thre['q3'],thre['q2'],thre['q1']
-                if pred>=q3:
-                  adjust = 1.0
-                elif pred>=q2:
-                  adjust = 0.9
-                elif pred>=q1:
-                  adjust = 0.5
-                else:
-                  adjust = 0.2
-                adjusts[i] = adjust
-              adjust_label[label] += w * (1-np.prod(1-adjusts))
+        for oof,w in zip(pseudo,pseudo_weights):
           for label in self.cfg.bird_cols:
-            if adjust_label[label] <= 0.6:
-              adjust_label[label] = 0.01
-            elif adjust_label[label]<=0.75:
-              adjust_label[label] = 0.6
-            target[label] = target[label] * adjust_label[label]
+            preds = [oof['pred'][version][filename][label][sample_end] for sample_end in sample_ends]
+            thre = oof['thre'][label]
+            adjusts = np.zeros(shape=(len(preds),))
+            for i,pred in enumerate(preds):
+              q3,q2,q1 = thre['q3'],thre['q2'],thre['q1']
+              if pred>=q3:
+                adjust = 1.0
+              elif pred>=q2:
+                adjust = 0.9
+              elif pred>=q1:
+                adjust = 0.5
+              else:
+                adjust = 0.2
+              adjusts[i] = adjust
+            adjust_label[label] += w * (1-np.prod(1-adjusts))
+        for label in self.cfg.bird_cols:
+          if adjust_label[label] <= 0.6:
+            adjust_label[label] = 0.01
+          elif adjust_label[label]<=0.75:
+            adjust_label[label] = 0.6
+          target[label] = target[label] * adjust_label[label]
         return target
 
     def load_data(self, filepath,target,row):
@@ -104,9 +102,17 @@ class BirdTrainDataset(Dataset):
             nearest_offset = int(np.round(offset/self.cfg.infer_duration) * self.cfg.infer_duration)
             sample_ends = [str(nearest_offset+(i+1)*self.cfg.infer_duration) for i in range(int(work_duration/self.cfg.infer_duration)) if nearest_offset+(i+1)*self.cfg.infer_duration<=pseudo_max_end]
             # use pseudo and hand label if the total duration of the audio is larger than clip duration
-            if work_duration < duration:
-              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add') | (version=='scrap_data') | (version=='scrap_data_add') | (version=='scrap_data_0515'):
-                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo,self.pseudo_weights)
+            if (work_duration < duration)&(self.pseudo is not None):
+              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset1']['pseudo'],self.pseudo['subset1']['weight'])
+              elif (version=='scrap_data'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset2']['pseudo'],self.pseudo['subset2']['weight'])
+              elif (version=='scrap_data_add'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset3']['pseudo'],self.pseudo['subset3']['weight'])
+              elif (version=='scrap_data_0515'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset4']['pseudo'],self.pseudo['subset4']['weight'])
+              else:
+                raise NotImplementedError
 
         else:
             audio, orig_sr = lb.load(filepath, sr=None, mono=True,offset=0,duration=self.cfg.valid_duration)
@@ -132,9 +138,17 @@ class BirdTrainDataset(Dataset):
             sample_end = np.min([audio_parts * self.cfg.infer_duration, pseudo_max_end])
             sample_ends = [str(sample_end-i*self.cfg.infer_duration) for i in range(valid_len) if sample_end-i*self.cfg.infer_duration>0]
 
-            if self.cfg.valid_duration < duration:
-              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add') | (version=='scrap_data') | (version=='scrap_data_add') | (version=='scrap_data_0515'):
-                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo,self.pseudo_weights)
+            if (work_duration < duration)&(self.pseudo is not None):
+              if (version=='2023') | (version=='add') | (version=='scrap') | (version=='scrap_add') | (version=='scrap_add_add'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset1']['pseudo'],self.pseudo['subset1']['weight'])
+              elif (version=='scrap_data'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset2']['pseudo'],self.pseudo['subset2']['weight'])
+              elif (version=='scrap_data_add'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset3']['pseudo'],self.pseudo['subset3']['weight'])
+              elif (version=='scrap_data_0515'):
+                target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset4']['pseudo'],self.pseudo['subset4']['weight'])
+              else:
+                raise NotImplementedError
 
         audio_sample = torch.tensor(audio_sample[np.newaxis]).float()
         return audio_sample,target
@@ -150,7 +164,7 @@ class BirdTrainDataset(Dataset):
         target = torch.tensor(target).float()
         return audio, target , weight
 
-def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, sample_weight,cfg,pseudo=None,pseudo_weights=None,transforms=None):
+def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, sample_weight,cfg,pseudo=None,transforms=None):
   num_workers = multiprocessing.cpu_count()
   sample_weight = torch.from_numpy(sample_weight)
   sampler = WeightedRandomSampler(sample_weight.type('torch.DoubleTensor'), len(sample_weight),replacement=True)
@@ -161,7 +175,6 @@ def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, s
       cfg,
       train = True,
       pseudo = pseudo,
-      pseudo_weights = pseudo_weights,
       transforms = transforms,
   )
   ds_val = BirdTrainDataset(
@@ -170,7 +183,6 @@ def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, s
       cfg,
       train = False,
       pseudo = None,
-      pseudo_weights= None,
       transforms=None,
   )
   dl_train = DataLoader(ds_train, batch_size=cfg.batch_size , sampler=sampler, num_workers = num_workers, pin_memory=True)

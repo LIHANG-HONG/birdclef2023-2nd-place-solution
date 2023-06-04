@@ -39,6 +39,10 @@ def preprocess(cfg):
         audio = cfg.am_audio_transforms(audio,sample_rate=cfg.SR)
         return audio
 
+    # primary_label_2023: used in birdclef2023, containing wrong label
+    # primary_label_very_strict: original label from xeno-canto
+    # primary_label_strict: fuse the ebird_code with same name but different number. ex: categr1	to categr
+    # primary_label: fuse the same species with different ebird code: ['grbcam1',  'blkkit3',  'whcshr1', 'barowl8','barowl7','egwtea1','foxsp1','euhgul1']
     df = pd.read_csv(cfg.train_data)
     df['secondary_labels'] = df['secondary_labels'].apply(lambda x: literal_eval(x))
     df['secondary_labels_2023'] = df['secondary_labels_2023'].apply(lambda x: literal_eval(x))

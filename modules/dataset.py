@@ -34,9 +34,9 @@ class BirdTrainDataset(Dataset):
 
     def adjust_label(self,labels,filename,sample_ends,target,version,pseudo,pseudo_weights):
         adjust_label = {label:0 for label in labels if label in self.cfg.bird_cols}
-
+        labels_comp = list(adjust_label.keys())
         for oof,w in zip(pseudo,pseudo_weights):
-          for label in self.cfg.bird_cols:
+          for label in labels_comp:
             preds = [oof['pred'][version][filename][label][sample_end] for sample_end in sample_ends]
             thre = oof['thre'][label]
             adjusts = np.zeros(shape=(len(preds),))
@@ -52,7 +52,7 @@ class BirdTrainDataset(Dataset):
                 adjust = 0.2
               adjusts[i] = adjust
             adjust_label[label] += w * (1-np.prod(1-adjusts))
-        for label in self.cfg.bird_cols:
+        for label in labels_comp:
           if adjust_label[label] <= 0.6:
             adjust_label[label] = 0.01
           elif adjust_label[label]<=0.75:
@@ -111,8 +111,6 @@ class BirdTrainDataset(Dataset):
                 target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset3']['pseudo'],self.pseudo['subset3']['weight'])
               elif (version=='scrap_data_0515'):
                 target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset4']['pseudo'],self.pseudo['subset4']['weight'])
-              else:
-                raise NotImplementedError
 
         else:
             audio, orig_sr = lb.load(filepath, sr=None, mono=True,offset=0,duration=self.cfg.valid_duration)
@@ -147,8 +145,6 @@ class BirdTrainDataset(Dataset):
                 target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset3']['pseudo'],self.pseudo['subset3']['weight'])
               elif (version=='scrap_data_0515'):
                 target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset4']['pseudo'],self.pseudo['subset4']['weight'])
-              else:
-                raise NotImplementedError
 
         audio_sample = torch.tensor(audio_sample[np.newaxis]).float()
         return audio_sample,target
@@ -164,7 +160,7 @@ class BirdTrainDataset(Dataset):
         target = torch.tensor(target).float()
         return audio, target , weight
 
-def ged_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, sample_weight,cfg,pseudo=None,transforms=None):
+def get_train_dataloader(df_train, df_valid, df_labels_train, df_labels_valid, sample_weight,cfg,pseudo=None,transforms=None):
   num_workers = multiprocessing.cpu_count()
   sample_weight = torch.from_numpy(sample_weight)
   sampler = WeightedRandomSampler(sample_weight.type('torch.DoubleTensor'), len(sample_weight),replacement=True)

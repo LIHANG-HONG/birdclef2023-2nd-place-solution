@@ -931,6 +931,13 @@ def load_model(cfg,stage,train=True):
     else:
         state_dict = None
 
+    # drop ema because did not used in the competition
+    if state_dict is not None:
+        keys = list(state_dict.keys())
+        for k in keys:
+            if 'ema' in k:
+                state_dict.pop(k)
+
     if cfg.model_type=='sed':
         if train:
             model = BirdClefTrainModelSED(cfg, stage)

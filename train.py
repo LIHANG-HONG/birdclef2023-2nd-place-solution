@@ -1,7 +1,7 @@
 import argparse
 import importlib
 from modules.preprocess import preprocess,prepare_cfg
-from modules.dataset import ged_train_dataloader
+from modules.dataset import get_train_dataloader
 from modules.model import load_model
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
@@ -9,6 +9,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, BackboneFinetuning, Ear
 import torch
 import os
 import gc
+import json
 
 def make_parser():
     parser = argparse.ArgumentParser(description='拡張子変更、アノテーション画像作成')
@@ -30,15 +31,32 @@ def main():
 
     df_train, df_valid, df_label_train, df_label_valid, sample_weight, transforms = preprocess(cfg)
 
-    dl_train, dl_val, ds_train, ds_val = ged_train_dataloader(
+    pseudo = None
+    # =========================================================
+    # comment it out if do not use pseudo and hand label
+    with open('/content/birdclef2023-2nd-place-solution/inputs/pseudo_label/pseudo.json') as f:
+        pseudo = json.loads(f.read())
+
+    with open('/content/birdclef2023-2nd-place-solution/inputs/hand_label/hand_label.json') as f:
+        hand_label = json.loads(f.read())
+
+    for version in hand_label['pred'].keys():
+        for filename in hand_label['pred'][version].keys():
+            for label in hand_label['pred'][version][filename].keys():
+                for second in hand_label['pred'][version][filename][label].keys():
+                    for i in range(len(pseudo['subset1']['pseudo'])):
+                        if second in pseudo['subset1']['pseudo'][i]['pred'][version][filename][label].keys():
+                            pseudo['subset1']['pseudo'][i]['pred'][version][filename][label][second] = hand_label['pred'][version][filename][label][second]
+    # =========================================================
+
+    dl_train, dl_val, ds_train, ds_val = get_train_dataloader(
         df_train,
         df_valid,
         df_label_train,
         df_label_valid,
         sample_weight,
         cfg,
-        None,
-        None,
+        pseudo,
         transforms
     )
 

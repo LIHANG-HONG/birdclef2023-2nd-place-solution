@@ -50,7 +50,7 @@ def preprocess(cfg):
     df['secondary_labels_very_strict'] = df['secondary_labels_very_strict'].apply(lambda x: literal_eval(x))
     df['version'] = df['version'].astype(str)
     df['rating'] = df['rating'].mask(np.isnan(df['rating'].values),df['q'].map({'A':5,'B':4,'C':3,'D':2,'E':1,'no score':0}))
-    df['filename'] = df['id'].apply(lambda x: f'XC{x}.ogg')
+    df['filename'] = df['id'].apply(lambda x: f'XC{x}')
     df['path'] = df['id'].apply(lambda x: os.path.join(cfg.train_dir,f'XC{x}.ogg'))
     # ensure all the train data is available
     assert df['path'].apply(lambda x:os.path.exists(x)).all()

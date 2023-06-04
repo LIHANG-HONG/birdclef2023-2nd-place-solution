@@ -66,7 +66,7 @@ cfg.lr = {
 cfg.model_ckpt = {
     #"pretrain_ce": None,
     #"pretrain_bce": "outputs/cnn_b0ns/pytorch/pretrain_ce/last.ckpt",
-    "train_ce": "outputs/cnn_b0ns/pytorch/pretrain_bce/last.ckpt",
+    "train_ce": None,
     #"train_bce": "outputs/cnn_b0ns/pytorch/train_ce/last.ckpt",
     #"finetune": "outputs/cnn_b0ns/pytorch/train_bce/last.ckpt",
 }

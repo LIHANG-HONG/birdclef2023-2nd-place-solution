@@ -20,7 +20,7 @@ if cfg.WANDB_API_KEY=='your key':
     raise NotImplementedError
 
 cfg.model_type = "sed"
-cfg.model_name = "tf_efficientnetv2_s_in21k"
+cfg.model_name = "tf_efficientnet_b3_ns"
 
 cfg.secondary_label = 0.9
 cfg.secondary_label_weight = 0.5

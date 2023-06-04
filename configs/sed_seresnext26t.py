@@ -20,29 +20,29 @@ if cfg.WANDB_API_KEY=='your key':
     raise NotImplementedError
 
 cfg.model_type = "sed"
-cfg.model_name = "tf_efficientnetv2_s_in21k"
+cfg.model_name = "seresnext26t_32x4d"
 
 cfg.secondary_label = 0.9
 cfg.secondary_label_weight = 0.5
 
 
-cfg.batch_size = 96
+cfg.batch_size = 128
 cfg.PRECISION = 32
 cfg.seed = {
-    "pretrain_ce": 20231121,
-    "pretrain_bce": 20230503,
-    "train_ce": 20231019,
-    "train_bce": 20231911,
-    "finetune": 20230523,
+    "pretrain_ce": 19940215,
+    "pretrain_bce": 19000215,
+    "train_ce": 19951019,
+    #"train_bce": 20231911,
+    #"finetune": 20230523,
 }
 cfg.DURATION_TRAIN = 10
 cfg.DURATION_FINETUNE = 30
 cfg.freeze = False
-cfg.mixup = True
+cfg.mixup = False
 cfg.mixup2 = True
-cfg.mixup_prob = 0.7
-cfg.mixup_double = 0.5
-cfg.mixup2_prob = 0.15
+cfg.mixup_prob = 0.1
+cfg.mixup_double = 1.0
+cfg.mixup2_prob = 0.7
 cfg.mix_beta = 5
 cfg.mix_beta2 = 2
 cfg.in_chans = 1
@@ -77,7 +77,7 @@ cfg.output_path = {
     #"finetune": "outputs/sed_seresnext26t/pytorch/finetune",
 }
 
-cfg.final_model_path = "outputs/sed_seresnext26t/pytorch/finetune/last.ckpt"
+cfg.final_model_path = "outputs/sed_seresnext26t/pytorch/train_ce/last.ckpt"
 cfg.onnx_path = "outputs/sed_seresnext26t/onnx"
 cfg.openvino_path = "outputs/sed_seresnext26t/openvino"
 

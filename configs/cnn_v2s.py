@@ -109,7 +109,7 @@ cfg.am_audio_transforms = amCompose([
 ])
 
 
-np_audio_transforms = CustomCompose([
+cfg.np_audio_transforms = CustomCompose([
   CustomOneOf([
     NoiseInjection(p=0.5, max_noise_level=0.04),
     GaussianNoiseSNR(p=0.5),

@@ -77,14 +77,13 @@ def main():
     callbacks_to_use = [checkpoint_callback]
     model = load_model(cfg,stage)
     trainer = pl.Trainer(
-        gpus=1,
+        devices=1,
         val_check_interval=1.0,
         deterministic=None,
         max_epochs=cfg.epochs[stage],
         logger=logger,
-        auto_lr_find=False,
         callbacks=callbacks_to_use,
-        precision=cfg.PRECISION, accelerator="gpu",
+        precision=cfg.PRECISION, accelerator="auto",
     )
 
     print("Running trainer.fit")

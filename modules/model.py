@@ -610,6 +610,9 @@ class BirdClefModelBase(pl.LightningModule):
                 print(f"epoch {self.current_epoch} validation loss {avg_loss}")
             val_df.to_pickle("val_df.pkl")
             pred_df.to_pickle("pred_df.pkl")
+        else:
+            avg_loss = 0
+            avg_score = 0
         return {"val_loss": avg_loss, "val_cmap": avg_score}
 
     def on_train_epoch_end(self, outputs):
@@ -844,7 +847,28 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
             for param in self.backbone.parameters():
                 param.requires_grad = False
 
-    def predict(self,x):
+    def forward(self, batch):
+        x = batch[0].squeeze(1)
+        y = batch[1]
+        weight = batch[2]
+        if self.training:
+            self.factor = self.cfg.train_part
+        else:
+            self.factor = self.cfg.valid_part
+
+        if not self.training:
+            bs = x.shape[0]
+            x = x.reshape((bs, -1))
+        else:
+            if self.cfg.mixup:
+                x, y, weight = self.mixup(x, y, weight)
+        bs, time = x.shape
+        x = x.reshape(bs * self.factor, time // self.factor)
+        #with autocast(enabled=False):
+        x = self.transform_to_spec(x.unsqueeze(1))
+        if self.in_chans == 3:
+            x = image_delta(x)
+
         x = x.permute(0, 1, 3, 2)
         # x = x.permute(0, 2, 1)
         # x = x[:, None, :, :]
@@ -879,31 +903,6 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
             )
         else:
             logits = self.head(x)
-        return logits
-
-    def forward(self, batch):
-        x = batch[0].squeeze(1)
-        y = batch[1]
-        weight = batch[2]
-        if self.training:
-            self.factor = self.cfg.train_part
-        else:
-            self.factor = self.cfg.valid_part
-
-        if not self.training:
-            bs = x.shape[0]
-            x = x.reshape((bs, -1))
-        else:
-            if self.cfg.mixup:
-                x, y, weight = self.mixup(x, y, weight)
-        bs, time = x.shape
-        x = x.reshape(bs * self.factor, time // self.factor)
-        #with autocast(enabled=False):
-        x = self.transform_to_spec(x.unsqueeze(1))
-        if self.in_chans == 3:
-            x = image_delta(x)
-
-        logits = self.predict(x)
 
         loss = self.loss_function(logits, y)
         if self.loss == "ce":
@@ -918,7 +917,12 @@ class BirdClefTrainModelCNN(BirdClefModelBase):
 
 class BirdClefInferModelCNN(BirdClefTrainModelCNN):
     def forward(self,x):
-        return self.predict(x)
+        x = x.permute(0, 1, 3, 2)
+        x = self.backbone(x)
+        x = self.global_pool(x)
+        x = x[:, :, 0, 0]
+        logits = self.head(x)
+        return logits
 
 def load_model(cfg,stage,train=True):
     if train:
@@ -928,6 +932,7 @@ def load_model(cfg,stage,train=True):
 
     if model_ckpt is not None:
         state_dict = torch.load(model_ckpt,map_location=cfg.DEVICE)['state_dict']
+        print('loading model from checkpoint')
     else:
         state_dict = None
 

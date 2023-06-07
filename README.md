@@ -14,7 +14,8 @@ pip3 install -r requirements.txt
 
 ## Data Preparation
 
-### train audios
+### train metadata, audios
+Metadata can be downloaded from [here](https://www.kaggle.com/datasets/honglihang/birdclef2023-extended-train)
 
 Download the audios from [BirdCLEF2023](https://www.kaggle.com/competitions/birdclef-2023/data), [BirdCLEF2022](https://www.kaggle.com/competitions/birdclef-2022/data), [BirdCLEF2021](https://www.kaggle.com/competitions/birdclef-2021/data) and [extended BirdCLEF2020](https://www.kaggle.com/competitions/birdclef-2023/discussion/398318). For additional audios of 2023 species, metadata of audios is included in ./inputs/train.csv. Use the "file" column in csv to download audios from [Xeno-canto](https://xeno-canto.org) and modify the audios to mono channel, 32kHz, ogg format.
 

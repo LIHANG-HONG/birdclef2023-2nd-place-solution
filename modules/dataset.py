@@ -2,7 +2,7 @@ import librosa as lb
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
-from utils import crop_or_pad
+from modules.utils import crop_or_pad
 import multiprocessing
 
 class BirdTrainDataset(Dataset):

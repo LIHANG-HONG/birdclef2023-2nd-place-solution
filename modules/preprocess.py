@@ -53,8 +53,12 @@ def preprocess(cfg):
     df['filename'] = df['id'].apply(lambda x: f'XC{x}')
     df['path'] = df['id'].apply(lambda x: os.path.join(cfg.train_dir,f'XC{x}.ogg'))
     # ensure all the train data is available
-    assert df['path'].apply(lambda x:os.path.exists(x)).all()
-    #df = df[df['path'].apply(lambda x:os.path.exists(x))].reset_index(drop=True)
+    if not df['path'].apply(lambda x:os.path.exists(x)).all():
+        print('===========================================================')
+        print('warning: missing audio files in ./inputs/train_audios')
+        print('warning: only audios available will be used for training')
+        print('===========================================================')
+    df = df[df['path'].apply(lambda x:os.path.exists(x))].reset_index(drop=True)
 
     labels = np.zeros(shape=(len(df),len(cfg.bird_cols)))
     df_labels = pd.DataFrame(labels,columns=cfg.bird_cols)

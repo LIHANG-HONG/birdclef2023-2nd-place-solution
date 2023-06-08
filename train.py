@@ -15,6 +15,7 @@ def make_parser():
     parser = argparse.ArgumentParser(description='拡張子変更、アノテーション画像作成')
     parser.add_argument('--stage', choices=["pretrain_ce","pretrain_bce","train_ce","train_bce","finetune"])
     parser.add_argument('--model_name', choices=["sed_v2s",'sed_b3ns','sed_seresnext26t','cnn_v2s','cnn_resnet34d','cnn_b3ns','cnn_b0ns'])
+    parser.add_argument('--use_pseudo', action='store_true')
     return parser
 
 
@@ -23,6 +24,7 @@ def main():
     args = parser.parse_args()
     stage = args.stage
     model_name = args.model_name
+    use_pseudo = args.use_pseudo
     cfg = importlib.import_module(f'configs.{model_name}').basic_cfg
     cfg = prepare_cfg(cfg,stage)
     os.environ['WANDB_API_KEY'] = cfg.WANDB_API_KEY
@@ -32,22 +34,23 @@ def main():
     df_train, df_valid, df_label_train, df_label_valid, sample_weight, transforms = preprocess(cfg)
 
     pseudo = None
-    # =========================================================
-    # comment it out if do not use pseudo and hand label
-    with open('/content/birdclef2023-2nd-place-solution/inputs/pseudo_label/pseudo.json') as f:
-        pseudo = json.loads(f.read())
 
-    with open('/content/birdclef2023-2nd-place-solution/inputs/hand_label/hand_label.json') as f:
-        hand_label = json.loads(f.read())
+    if use_pseudo:
+        # =========================================================
+        with open('/content/birdclef2023-2nd-place-solution/inputs/pseudo_label/pseudo.json') as f:
+            pseudo = json.loads(f.read())
 
-    for version in hand_label['pred'].keys():
-        for filename in hand_label['pred'][version].keys():
-            for label in hand_label['pred'][version][filename].keys():
-                for second in hand_label['pred'][version][filename][label].keys():
-                    for i in range(len(pseudo['subset1']['pseudo'])):
-                        if second in pseudo['subset1']['pseudo'][i]['pred'][version][filename][label].keys():
-                            pseudo['subset1']['pseudo'][i]['pred'][version][filename][label][second] = hand_label['pred'][version][filename][label][second]
-    # =========================================================
+        with open('/content/birdclef2023-2nd-place-solution/inputs/hand_label/hand_label.json') as f:
+            hand_label = json.loads(f.read())
+
+        for version in hand_label['pred'].keys():
+            for filename in hand_label['pred'][version].keys():
+                for label in hand_label['pred'][version][filename].keys():
+                    for second in hand_label['pred'][version][filename][label].keys():
+                        for i in range(len(pseudo['subset1']['pseudo'])):
+                            if second in pseudo['subset1']['pseudo'][i]['pred'][version][filename][label].keys():
+                                pseudo['subset1']['pseudo'][i]['pred'][version][filename][label][second] = hand_label['pred'][version][filename][label][second]
+        # =========================================================
 
     dl_train, dl_val, ds_train, ds_val = get_train_dataloader(
         df_train,

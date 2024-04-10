@@ -147,6 +147,10 @@ class BirdTrainDataset(Dataset):
                 target = self.adjust_label(labels,filename,sample_ends,target,version,self.pseudo['subset4']['pseudo'],self.pseudo['subset4']['weight'])
 
         audio_sample = torch.tensor(audio_sample[np.newaxis]).float()
+
+        target = target.values
+        if not self.train:
+          target[target>0] = 1
         return audio_sample,target
 
     def __getitem__(self, idx):

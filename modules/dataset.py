@@ -118,7 +118,7 @@ class BirdTrainDataset(Dataset):
                 audio = lb.resample(audio, orig_sr, self.sr, res_type=self.res_type)
 
             audio_parts = int(np.ceil(len(audio)/self.audio_length))
-            audio_sample = [audio[i:(i+1)*self.audio_length] for i in range(audio_parts)]
+            audio_sample = [audio[i*self.audio_length:(i+1)*self.audio_length] for i in range(audio_parts)]
 
             if len(audio_sample[-1])<self.audio_length:
               audio_sample[-1] = crop_or_pad(audio_sample[-1],length=self.audio_length,is_train=self.train)
